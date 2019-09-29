@@ -1,0 +1,192 @@
+Parameters:
+# whatever you consider a changing value, put it as a parameter instead of hard-coding it into your script
+# This is optional, but it would be nice to have a URL here with the Load Balancer DNS Name and “http” in front of it .
+    EnvironmentName:
+        Description: An environment name that will be prefixed to resource names
+        Type: String
+        Default: udacity-project02
+        
+    VpcCIDR:
+        Description: IP range (CIDR notation) for this VPC
+        Type: String
+        Default: 10.0.0.0/16
+
+    PublicSubnet01CIDR:
+        Description: IP range (CIDR notation) for the corresponding subnet
+        Type: String
+        Default: 10.0.0.0/24
+
+    PublicSubnet02CIDR:
+        Description: IP range (CIDR notation) for the corresponding subnet
+        Type: String
+        Default: 10.0.1.0/24
+
+    PrivateSubnet01CIDR:
+        Description: IP range (CIDR notation) for the corresponding subnet
+        Type: String
+        Default: 10.0.2.0/24
+
+    PrivateSubnet02CIDR:
+        Description: IP range (CIDR notation) for the corresponding subnet
+        Type: String
+        Default: 10.0.3.0/24
+        
+
+Resources:
+  #instace profile contains the IAM Role name(s) that we want to associate to our auto scaling EC2 Servers
+    UdacityVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+        CidrBlock: !Ref VpcCIDR
+        EnableDnsSupport: true
+        EnableDnsHostnames: true
+        Tags:
+        - Key: group-name
+          Value: !Ref EnvironmentName
+
+    PrivateSubnet01:
+      Type: AWS::EC2::Subnet
+      Properties:
+        AvailabilityZone: !Select [ 0, !GetAZs '' ]
+        VpcId: !Ref UdacityVPC
+        CidrBlock: !Ref PrivateSubnet01CIDR
+        Tags:
+          - Key: group-name
+            Value: !Ref EnvironmentName
+
+    PrivateSubnet02:
+      Type: AWS::EC2::Subnet
+      Properties:
+        AvailabilityZone: !Select [ 0, !GetAZs '' ]
+        VpcId: !Ref UdacityVPC
+        CidrBlock: !Ref PrivateSubnet02CIDR
+        Tags:
+          - Key: group-name
+            Value: !Ref EnvironmentName
+
+    PublicSubnet01:
+      Type: AWS::EC2::Subnet
+      Properties:
+        AvailabilityZone: !Select [ 0, !GetAZs '' ]
+        VpcId: UdacityVPC
+        CidrBlock: --.--.--.--/--
+        Tags:
+          - Key: group-name
+            Value: !Ref EnvironmentName
+
+
+    PublicSubnet02:
+      Type: AWS::EC2::Subnet
+      Properties:
+        AvailabilityZone: !Select [ 1, !GetAZs '' ]
+        VpcId: UdacityVPC
+        CidrBlock: --.--.--.--/--
+        Tags:
+          - Key: group-name
+            Value: !Ref EnvironmentName
+
+    NatGateway01EIP:
+      Type: AWS::EC2::EIP
+      DependsOn: InternetGatewayAttachment
+      Properties:
+        Domain: vpc\
+
+    NatGateway02EIP:
+      Type: AWS::EC2::EIP
+      DependsOn: InternetGatewayAttachment
+      Properties:
+        Domain: vpc    
+
+    NatGateway1: 
+        Type: AWS::EC2::NatGateway
+        Properties: 
+            AllocationId: !GetAtt NatGateway1EIP.AllocationId
+            SubnetId: !Ref PublicSubnet01
+
+    NatGateway2: 
+        Type: AWS::EC2::NatGateway
+        Properties:
+            AllocationId: !GetAtt NatGateway2EIP.AllocationId
+            SubnetId: !Ref PublicSubnet02
+
+    UdacityInternetGateway:
+      Type: AWS::EC2::InternetGateway
+      Properties:
+        Tags:
+          - Key: gourp-name
+            Value: !Ref EnvironmentName
+    InternetGatewayAttachment:
+      Type: AWS::EC2::VPCGatewayAttachment
+      Properties:
+        VpcId: !Ref UdacityVPC
+        InternetGatewayId: !Ref UdacityInternetGateway
+
+    # TODO Complete
+    UdacitySecGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupName: 
+        GroupDescription: 
+        VpcId:
+        SecurityGroupIngress:
+          - Security Group Rule
+        SecurityGroupEgress:
+          - Security Group Rule
+        Tags:
+          - Key:
+            Value:
+
+    UdacityAutoscalingGroup: 
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+        AutoScalingGroupName: UdacityAsg
+        AvailabilityZones:
+            Fn::GetAZs: ""
+        LaunchConfigurationName: !Ref UdacityLaunchConfig
+        LoadBalancerNames:
+        - !Ref ElasticLoadBalancer
+        MaxSize: 6
+        MinSize: 4
+        VPCZoneIdentifier: 
+        - UdacityVPC
+        Tags: 
+        - Key: group-name
+            Value: !Ref EnvironmentName
+            PropagateAtLaunch: 'true'
+
+    # TODO Complete
+    UdacityLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+        LaunchConfigurationName: 
+        AssociatePublicIpAddress: true|false
+        IamInstanceProfile: 
+        ImageId: ami-06f2f779464715dc5
+        EbsOptimized: true|false
+        InstanceMonitoring: true
+        InstanceType: 
+        KernelId: 
+        KeyName: 
+        SecurityGroups:
+        - UdacitySecGroup
+        UserData:
+        Fn::Base64: !Sub
+            #!/bin/bash -ex # your script here
+    
+
+  ProfileWithRolesForOurApp:
+    Type: AWS::IAM::InstanceProfile
+    Properties: 
+      Roles:
+        - UdacityS3ReadOnlyEC2
+  
+          #!/bin/bash
+          apt-get update -y
+          apt-get install unzip awscli -y
+          apt-get install apache2 -y
+          systemctl start apache2.service
+          cd /var/www/html
+          aws s3 cp s3://udacity-demo-1/udacity.zip .
+          unzip -o udacity.zip
+  Outputs: 
+  #Bonus points for useful outputs!

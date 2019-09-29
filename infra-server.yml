@@ -1,0 +1,201 @@
+# This document uses recommendations located at the following URL:
+# https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-anatomy.html
+
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description:
+  Carlos Mendez / Udacity Cloud DevOps Engineering Nano-Degree
+
+# Metadata:
+#     Instances:
+#         Description:
+
+Parameters:
+    EnvironmentName:
+        Description: An environment name that will be prefixed to resource names
+        Type: String
+        Default: project02
+
+# Mappings:
+    # set of mappings
+# Conditions:
+    # set of conditions
+# Transform:
+    # set of transforms
+
+Resources:
+    LBSecGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            GroupDescription: Allow http traffic to our load balancer
+            VpcId:
+                Fn::ImportValue:
+                    !Sub "${EnvironmentName}-VPCID"
+            SecurityGroupIngress:
+            -   IpProtocol: tcp
+                FromPort: 80
+                ToPort: 80
+                CidrIp: 0.0.0.0/0
+            SecurityGroupEgress:
+            -   IpProtocol: tcp
+                FromPort: 80
+                ToPort: 80
+                CidrIp: 0.0.0.0/0
+
+    WebServerSecGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            GroupDescription: Allow http traffic to our hosts and SSH from local only
+            VpcId:
+                Fn::ImportValue:
+                    !Sub "${EnvironmentName}-VPCID"
+            SecurityGroupIngress:
+            -   IpProtocol: tcp
+                FromPort: 80
+                ToPort: 80
+                CidrIp: 0.0.0.0/0
+            -   IpProtocol: tcp
+                FromPort: 22
+                ToPort: 22
+                CidrIp: 0.0.0.0/0
+            SecurityGroupEgress:
+            -   IpProtocol: tcp
+                FromPort: 0
+                ToPort: 65535
+                CidrIp: 0.0.0.0/0
+
+    WebAppLaunchConfig:
+        Type: AWS::AutoScaling::LaunchConfiguration
+        Properties:
+            UserData:
+                Fn::Base64: !Sub |
+                    #!/bin/bash
+                    # # Install docker
+                    # # It may be required to use sudo to execute the following commands
+                    # # Update the apt package index
+                    # apt-get update -y
+                    # # Install packages to allow apt to use a repository over HTTPS
+                    # apt-get install -y \
+                    # apt-transport-https \
+                    # ca-certificates \
+                    # curl \
+                    # gnupg-agent \
+                    # software-properties-common
+                    # # Add Docker’s official GPG key
+                    # curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+                    # # Set up the stable repository
+                    # add-apt-repository \
+                    # "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+                    # $(lsb_release -cs) \
+                    # stable"
+                    # # Update the apt package index
+                    # apt-get update
+                    # # Install the latest version of Docker CE and containerd
+                    # apt-get install -y docker-ce docker-ce-cli containerd.io
+                    # # Add the user 'docker' to the 'ubuntu' group
+                    # usermod -aG docker ubuntu
+                    # # Spin up a container running a tomcat server
+                    # # Feel free to use your preferred web server here.
+                    # # I don't think we'll be using any Java in this course,
+                    # # so tomcat should be unnecessary and apache2 or nginx should suffice
+                    # # I recommend using what you are most comfortable with.
+                    # docker run -p 8080:8080 tomcat:8.0
+
+                    yum update -y
+                    yum install -y httpd
+                    systemctl start httpd
+                    systemctl enable httpd
+                    # wget -P ../../var/www/html s3://project-02-carlos/index.html
+                    wget -P ../../var/www/html https://project-02-carlos.s3-us-west-2.amazonaws.com/index.html
+
+                    # sudo apt-get update -y
+                    # # install an Apache Web Server
+                    # sudo apt-get install apache2 -y
+                    # # Allow apache traffic to get through the firewall
+                    # # sudo ufw allow 'Apache'
+                    # # start the Apache Web Server
+                    # sudo systemctl start apache2.service
+                    # # enable the Apache Web Server to begin responding to requests
+                    # sudo systemctl enable apache2.service
+                    # # copy code (index.html) from S3 to the appropriate folder on the web server
+                    # # /var/www/html/
+                    # # wget -P ../../var/www/html s3://project-02-carlos/index.html
+                    # wget -P ../../var/www/html https://project-02-carlos.s3-us-west-2.amazonaws.com/index.html
+
+            # ImageId: ami-07b4f3c02c7f83d59 # Ubuntu 18
+            ImageId: ami-0f2176987ee50226e # Amazon Linux
+            # KeyName: # SSH Key value here when necessary
+            SecurityGroups:
+            - Ref: WebServerSecGroup
+            InstanceType: t3.small
+            BlockDeviceMappings:
+            -   DeviceName: "/dev/sdk"
+                Ebs:
+                    VolumeSize: '10' # 10GB
+
+    WebAppGroup:
+        Type: AWS::AutoScaling::AutoScalingGroup
+        Properties:
+            VPCZoneIdentifier:
+            - Fn::ImportValue: !Sub "${EnvironmentName}-PRIV-NETS"
+            LaunchConfigurationName: 
+                Ref: WebAppLaunchConfig
+            MinSize: '1'
+            MaxSize: '2'
+            TargetGroupARNs:
+            -   Ref: WebAppTargetGroup
+
+    WebAppTargetGroup:
+        Type: AWS::ElasticLoadBalancingV2::TargetGroup
+        Properties:
+            HealthCheckIntervalSeconds: 10
+            HealthCheckPath: /
+            HealthCheckProtocol: HTTP
+            HealthCheckTimeoutSeconds: 8
+            HealthyThresholdCount: 2
+            Port: 80
+            Protocol: HTTP
+            UnhealthyThresholdCount: 5
+            VpcId:
+                Fn::ImportValue:
+                    Fn::Sub: "${EnvironmentName}-VPCID"
+
+    WebAppLB:
+        Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+        Properties:
+            Subnets:
+            - Fn::ImportValue: !Sub "${EnvironmentName}-PUB-SN01"
+            - Fn::ImportValue: !Sub "${EnvironmentName}-PUB-SN02"
+            SecurityGroups:
+            - Ref: LBSecGroup
+
+    Listener:
+        Type: AWS::ElasticLoadBalancingV2::Listener
+        Properties:
+            DefaultActions:
+            -   Type: forward
+                TargetGroupArn: 
+                    Ref: WebAppTargetGroup
+            LoadBalancerArn: !Ref WebAppLB
+            Port: 80
+            Protocol: HTTP
+
+    ALBListenerRule:
+        Type: AWS::ElasticLoadBalancingV2::ListenerRule
+        Properties:
+            Actions:
+            -   Type: forward
+                TargetGroupArn: !Ref WebAppTargetGroup
+            Conditions:
+            -   Field: path-pattern
+                Values: [/]
+            ListenerArn: !Ref Listener
+            Priority: 1
+
+
+Outputs:
+    WebAppLoadBalancerDNSName:
+        Description: DNS name or Public URL of the Load Balancer
+        Value: !Join [ "", [ 'http://', !GetAtt WebAppLB.DNSName ]]
+        Export:
+            Name: !Sub ${EnvironmentName}-LB-DNSName
