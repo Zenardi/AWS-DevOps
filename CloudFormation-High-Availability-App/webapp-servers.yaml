@@ -12,14 +12,14 @@ Parameters:
         Type: String
         Default: udacity-project02-ha-webapp
 
-    AccessLogsS3Bucket:
-        Description:
+    # AccessLogsS3Bucket:
+    #     Description:
 
-            "S3 bucket name to place the logs in. 
-            The value of 'access_logs.s3.bucket' cannot be greater than 63 characters"
+    #         "S3 bucket name to place the logs in. 
+    #         The value of 'access_logs.s3.bucket' cannot be greater than 63 characters"
 
-        Type: String
-        Default: "project-02-zenardi-webapp-logs"
+    #     Type: String
+    #     Default: "project-02-zenardi-webapp-logs"
 
 
     InstanceType:
@@ -141,25 +141,33 @@ Resources:
             UserData:
                 Fn::Base64: !Sub |
                     #!/bin/bash
-                    # # Server config goes here 
-                    # sudo apt-get update -y
-                    # # install an Apache Web Server
-                    # sudo apt-get install apache2 -y
-                    # # Allow apache traffic to get through the firewall
-                    # sudo ufw allow 'Apache'
-                    # # start the Apache Web Server
-                    # sudo systemctl start apache2.service
-                    # # enable the Apache Web Server to begin responding to requests
-                    # sudo systemctl enable apache2.service
-                    # # copy code (index.html) from S3 to the appropriate folder on the web server
-                    # # /var/www/html/
-                    # wget -P ../../var/www/html s3://project-02-zenardi-webapp/test-udagram-1/index.html
+                    # A simple Hello World from the User-Data script
+                    echo "DEBUG -- Hello from user-data!"
 
+                    # Log EC2 Linux user-data to the console
+                    # This guidance was referenced at the following URL
+                    # https://aws.amazon.com/premiumsupport/knowledge-center/ec2-linux-log-user-data/
+                    exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+                    # Update the local package registry
+                    echo "DEBUG -- Attempting to update YUM packages"
                     yum update -y
+
+                    # Install the Apache Server
+                    echo "DEBUG -- Attempting to install the Apache Web Server"
                     yum install -y httpd
-                    systemctl start httpd
-                    systemctl enable httpd
-                    wget -P ../../var/www/html s3://project-02-zenardi-webapp/index.html
+                    # Start the Apache Server
+                    echo "DEBUG -- Attempting to start the Apache Web Server"
+                    systemctl start httpd.service
+                    # Enable the Apache Server
+                    echo "DEBUG -- Attempting to enable the Apache Web Server"
+                    systemctl enable httpd.service
+                    # Check the status of the Apache Server
+                    echo "DEBUG -- Attempting to check the status of the Apache Web Server"
+                    systemctl status httpd.service
+
+                    # Copy site files from S3 to local directory
+                    echo "DEBUG -- Attepmting to copy the site files from the S3 bucket to the local directory"
+                    wget -P ../../var/www/html https://project-02-zenardi-webapp.s3-us-west-2.amazonaws.com/index.html
 
             ImageId: ami-07b4f3c02c7f83d59 # Ubuntu 18
             #ImageId: ami-0f2176987ee50226e # Amazon Linux
@@ -182,7 +190,7 @@ Resources:
         Properties:
             VPCZoneIdentifier:
             # Deploy the instances into the Private Subnets
-            # - Fn::ImportValue: !Sub "${EnvironmentName}-PRI-NETS"
+            - Fn::ImportValue: !Sub "${EnvironmentName}-PRI-NETS"
             # Deploy the instances into the Public Subnets
             - Fn::ImportValue: !Sub "${EnvironmentName}-PUB-NETS"
             LaunchConfigurationName: 
@@ -213,11 +221,11 @@ Resources:
     WebAppLoadBalancer:
         Type: AWS::ElasticLoadBalancingV2::LoadBalancer
         Properties:
-            LoadBalancerAttributes:
-             -  Key: access_logs.s3.enabled
-                Value: true
-                Key: access_logs.s3.bucket
-                Value: !Ref AccessLogsS3Bucket
+            # LoadBalancerAttributes:
+            #  -  Key: access_logs.s3.enabled
+            #     Value: true
+            #     Key: access_logs.s3.bucket
+            #     Value: !Ref AccessLogsS3Bucket
             SecurityGroups:
             - Ref: LoadBalancerSecurityGroup
             Subnets:
